@@ -85,6 +85,37 @@ client.download_file("/tmp/debug.png", "output/debug.png")
 ### ASSEMBLER-8127: cellview already open in edit mode
 `maeMakeEditable()` fails with a modal dialog when the same cellview is already open in editable mode in another session (e.g. `fnxSession21` has it open while you try from `fnxSession0`). This dialog **completely blocks** the SKILL channel — even `hiFormDone` cannot reach it.
 
+---
+
+## Schematic / DB
+
+### BJT (pnp08/npn08) B-terminal floating — `schematic_label_instance_term` fails
+
+PDK BJT symbols (smic12sf pnp08, npn08) lack `master~>terminals`, so `schematic_label_instance_term()` cannot find the terminal's pin/fig for wire stub positioning. The B-terminal (base) typically has no graphical fig, causing:
+
+- **Electrical**: terminal stays floating (auto-net) even after `schCheck` + `dbSave`
+- **schCheck**: `"Pin 'B' on instance 'Q1': floating"` + `"Floating net 'net_X'"`
+
+**Root cause**: `ops.py:_schematic_bind_instance_and_term_expr` uses `rbInst~>master~>terminals` which returns nil for Pcell BJTs. The `inst~>terms` fallback (line 128) finds the terminal object but it has no `pins/~>figs`, so `rbCtr` stays nil and no wire stub is created.
+
+**Fix — two-step approach**:
+1. Python API handles device placement + standard terminal connections (G/D/S/B for MOS, PLUS/MINUS for passives)
+2. Post-processing via `execute_operations` force-connects figless BJT terminals:
+```python
+client.execute_operations(['''
+let((cv inst bTerm gnd)
+  cv = dbOpenCellViewByType("LIB" "CELL" "schematic" "schematic" "a")
+  inst = car(setof(x cv~>instances x~>name == "Q1"))
+  gnd = car(setof(x cv~>nets x~>name == "GND"))
+  bTerm = car(setof(x inst~>instTerms x~>name == "B"))
+  when(bTerm && gnd bTerm~>net = gnd)
+  dbSave(cv) dbClose(cv) "OK"
+)
+'''])
+```
+
+**Visual wire**: Must be placed manually in GUI. The `instTerm~>net = gnd` creates the electrical connection but no visible wire — schCheck passes without warnings only after adding a manual wire label.
+
 **Never call `maeMakeEditable()` unconditionally.** It can deadlock the bridge.
 
 **Recovery when stuck:** if the remote has no `python3` or `xdotool`, send Enter via Python 2.7 + ctypes directly on the Virtuoso display:

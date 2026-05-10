@@ -9,8 +9,16 @@ def escape_skill_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 def default_view_type_for(view: str) -> str:
-    """Map a logical Virtuoso view name to the expected viewType."""
+    """Map a logical Virtuoso view name to the expected viewType.
+
+    Cadence OA stores viewType separately from view name:
+      - view="symbol"   -> viewType="schematicSymbol"
+      - view="schematic" -> viewType="schematic"
+      - view="layout"    -> viewType="maskLayout"
+    """
     normalized = (view or "").strip().lower()
+    if normalized == "symbol":
+        return "schematicSymbol"
     if normalized.startswith("layout"):
         return "maskLayout"
     if normalized == "schematic":

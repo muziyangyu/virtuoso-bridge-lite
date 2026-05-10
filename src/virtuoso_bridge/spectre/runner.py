@@ -635,26 +635,56 @@ class SpectreSimulator:
         tasks: list[tuple[Path, dict]],
         max_workers: int | None = None,
     ) -> list[SimulationResult]:
-        """Submit multiple simulations and wait for all to complete.
+        """Run multiple simulations truly in parallel.
 
-        Convenience wrapper around :meth:`submit`.  For fire-and-forget or
-        incremental submission, use :meth:`submit` directly.
+        Each task gets its own :class:`SpectreSimulator` instance with an
+        independent SSH connection, so simulations run concurrently on the
+        remote host rather than serializing through a shared SSH runner.
 
-        *max_workers* overrides the instance default for this batch only.
+        For fire-and-forget or incremental submission, use :meth:`submit`
+        instead.
+
+        Args:
+            tasks: List of ``(netlist_path, params_dict)`` tuples.
+            max_workers: Max concurrent simulations (default: 8).
+
+        Returns:
+            List of :class:`SimulationResult` in submission order.
         """
-        old = self._max_workers
-        if max_workers is not None:
-            self._max_workers = max_workers
-            # Force new pool with the override
-            self.shutdown()
+        n_workers = max_workers or self._max_workers or 8
 
-        futures = [self.submit(Path(netlist), params) for netlist, params in tasks]
-        results = self.wait_all(futures)
+        def _run_one(args: tuple[Path, dict]) -> SimulationResult:
+            netlist, params = args
+            # Each task gets its own simulator instance + SSH connection.
+            sim = SpectreSimulator.from_env(
+                spectre_cmd=self._spectre_cmd,
+                spectre_args=self._spectre_args,
+                timeout=self._timeout,
+                work_dir=self._work_dir,
+                output_format=self._output_format,
+                keep_remote_files=self._keep_remote_files,
+                profile=self._profile,
+            )
+            return sim.run_simulation(Path(netlist), params)
 
-        if max_workers is not None:
-            self._max_workers = old
-            self.shutdown()
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            futures = [pool.submit(_run_one, t) for t in tasks]
+            results: list[SimulationResult] = []
+            for i, future in enumerate(futures):
+                try:
+                    results.append(future.result())
+                except Exception as exc:
+                    results.append(SimulationResult(
+                        status=ExecutionStatus.ERROR,
+                        errors=[f"Task {i} failed: {exc}"],
+                    ))
 
+        passed = sum(1 for r in results if r.status == ExecutionStatus.SUCCESS)
+        failed = len(results) - passed
+        status = f"[parallel] Done: {passed}/{len(results)} succeeded"
+        if failed:
+            status += f", {failed} failed"
+        print(status)
         return results
 
     @staticmethod

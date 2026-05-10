@@ -558,8 +558,8 @@ class SSHClient:
                 return True
             except (ConnectionRefusedError, OSError):
                 pass
-        # Fallback: is the process alive? (os.kill(pid, 0) on Unix)
-        if pid:
+        # Fallback: is the process alive? (os.kill(pid, 0) on Unix only)
+        if pid and sys.platform != "win32":
             try:
                 os.kill(pid, 0)
                 return True

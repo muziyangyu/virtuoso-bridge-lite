@@ -52,6 +52,24 @@ class LayoutOps:
         return LayoutEditor(self._owner, lib, cell, view=view, mode=mode, timeout=timeout)
 
 
+from . import layers
+from . import pdk
+
+# 便捷访问
+from .layers import SMIC12SF, SMIC12SFLayers
+from .pdk import (
+    SMIC12SF_LIB,
+    smic12sf_create_nmos,
+    smic12sf_create_pmos,
+    smic12sf_create_mom_cap,
+    smic12sf_create_resistor,
+    smic12sf_create_diode,
+    smic12sf_nmos_svt,
+    smic12sf_pmos_svt,
+    smic12sf_nmos_lvt,
+    smic12sf_pmos_lvt,
+)
+
 __all__ = [
     "LayoutOps",
     "LayoutEditor",
@@ -83,4 +101,18 @@ __all__ = [
     "layout_find_via_def",
     "layout_create_via_by_name",
     "layout_via_def_expr_from_name",
+    "layers",
+    "pdk",
+    "SMIC12SF",
+    "SMIC12SFLayers",
+    "SMIC12SF_LIB",
+    "smic12sf_create_nmos",
+    "smic12sf_create_pmos",
+    "smic12sf_create_mom_cap",
+    "smic12sf_create_resistor",
+    "smic12sf_create_diode",
+    "smic12sf_nmos_svt",
+    "smic12sf_pmos_svt",
+    "smic12sf_nmos_lvt",
+    "smic12sf_pmos_lvt",
 ]

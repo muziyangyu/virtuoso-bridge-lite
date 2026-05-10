@@ -125,7 +125,7 @@ def _schematic_bind_instance_and_term_expr(
         f'rbInst = car(setof(x {cv_expr}~>instances x~>name == "{escaped_instance}")) '
         'unless(rbInst error("instance not found")) '
         f'rbTerm = car(setof(x rbInst~>master~>terminals x~>name == "{escaped_term}")) '
-        'unless(rbTerm error("terminal not found")) '
+        f'unless(rbTerm rbTerm = car(setof(x rbInst~>terms x~>name == "{escaped_term}"))) '
         "rbPin = when(rbTerm car(rbTerm~>pins)) "
         "rbFig = when(rbPin car(rbPin~>figs)) "
     )
@@ -139,8 +139,8 @@ def _schematic_mos_stub_end_expr(
     return (
         "rbMasterName = when(rbInst lowerCase(rbInst~>master~>cellName)) "
         f'rbTermName = "{escaped_term}" '
-        'rbIsMos = rbMasterName && (rexMatchp("nch" rbMasterName) || rexMatchp("nmos" rbMasterName) || rexMatchp("pch" rbMasterName) || rexMatchp("pmos" rbMasterName)) '
-        'rbIsPmos = rbMasterName && (rexMatchp("pch" rbMasterName) || rexMatchp("pmos" rbMasterName)) '
+        'rbIsMos = rbMasterName && (rexMatchp("nch" rbMasterName) || rexMatchp("nmos" rbMasterName) || rexMatchp("n18" rbMasterName) || rexMatchp("n08" rbMasterName) || rexMatchp("pch" rbMasterName) || rexMatchp("pmos" rbMasterName) || rexMatchp("p18" rbMasterName) || rexMatchp("p08" rbMasterName)) '
+        'rbIsPmos = rbMasterName && (rexMatchp("pch" rbMasterName) || rexMatchp("pmos" rbMasterName) || rexMatchp("p18" rbMasterName) || rexMatchp("p08" rbMasterName)) '
         "rbOrigin = when(rbIsMos dbTransformPoint(list(0 0) rbInst~>transform)) "
         "rbLocalDir = when(rbIsMos "
         f'cond((rbTermName == "G" list(-{extension_length:g} 0)) '
@@ -334,14 +334,16 @@ def schematic_label_instance_term_offset(
         f'schCreateWireLabel({cv_expr} nil rbBranchEnd "{escape_skill_string(net_name)}" '
         f'"{escape_skill_string(justification)}" '
         f'"{escape_skill_string(rotation)}" '
-        f'"{escape_skill_string(style)}" {height:g} nil)))'
+        f'"{escape_skill_string(style)}" {height:g} nil) '
+        ") "
+        ")"
     )
 
 _PIN_MASTER_CELL = {"input": "ipin", "output": "opin", "inputOutput": "iopin"}
 
 def _pin_master_expr(direction: str) -> str:
     cell = _PIN_MASTER_CELL.get(direction, "iopin")
-    return f'dbOpenCellViewByType("basic" "{cell}" "symbol")'
+    return f'dbOpenCellViewByType("basic" "{cell}" "symbol" "schematicSymbol" "r")'
 
 def schematic_create_pin(
     pin_name: str,
@@ -401,3 +403,131 @@ def schematic_create_wire_between_instance_terms(
 def schematic_check(*, cv_expr: str = "cv") -> str:
     """Build SKILL to run schematic checking."""
     return f"schCheck({cv_expr})"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  SMIC12SF PDK schematic device builders
+# ═════════════════════════════════════════════════════════════════════════════
+
+SMIC12SF_LIB = "smic12sf"
+
+# Resistor types: metal resistors + poly/diffusion/well resistors
+_SMIC12SF_RES_TYPES = {
+    "rm1", "rm2", "rm3", "rm4", "rm5", "rm6", "rm7",
+    "rtm1", "rtm2", "ralpa",
+    "rhrpo", "rnwsti", "NGR", "PGR",
+}
+
+# MOM capacitor port counts → cell suffix
+_SMIC12SF_MOM_PORT_SUFFIX = {2: "2t", 3: "3t", 4: "4t", 5: "5t"}
+
+
+def schematic_create_smic12sf_resistor(
+    instance_name: str,
+    x: float,
+    y: float,
+    orientation: str = "R0",
+    *,
+    res_type: str = "rhrpo",
+    w: float = 1.0,
+    l: float = 1.0,
+    m: int = 1,
+    cv_expr: str = "cv",
+) -> str:
+    """Build SKILL to create a SMIC12SF PDK resistor in a schematic.
+
+    Places a ``{res_type}_ckt`` symbol instance and sets w/l/m via direct
+    database attribute assignment (bypasses CDF, avoiding callback issues).
+
+    Args:
+        instance_name: Instance name (e.g. ``"R0"``).
+        x, y: Placement coordinates.
+        orientation: ``"R0"``, ``"R90"``, ``"R180"``, ``"R270"``, ``"MY"``, ``"MX"``.
+        res_type: Resistor type — ``"rhrpo"`` (high-res poly, default),
+            ``"rm1"``-``"rm7"`` (metal 1-7), ``"rtm1"``/``"rtm2"`` (thick top metal),
+            ``"ralpa"`` (Al pad), ``"rnwsti"`` (N-well STI),
+            ``"NGR"`` / ``"PGR"`` (N/P gate resistor).
+        w: Resistor width in µm (database units).
+        l: Resistor length in µm (database units).
+        m: Multiplier.
+        cv_expr: SKILL variable holding the open cellview (default ``"cv"``).
+    """
+    if res_type not in _SMIC12SF_RES_TYPES:
+        raise ValueError(
+            f"Unknown res_type {res_type!r}. Expected one of: "
+            f"{', '.join(sorted(_SMIC12SF_RES_TYPES))}"
+        )
+    cell_name = f"{res_type}_ckt"
+    escaped_name = escape_skill_string(instance_name)
+    return (
+        f"let((rbMaster) "
+        f'rbMaster = dbOpenCellViewByType("{SMIC12SF_LIB}" "{cell_name}" "symbol" "schematicSymbol" "r") '
+        f'dbCreateInst({cv_expr} rbMaster "{escaped_name}" '
+        f"{skill_point(x, y)} "
+        f'"{escape_skill_string(orientation)}"))\n'
+        f"let((rbInst) "
+        f'rbInst = car(setof(x {cv_expr}~>instances x~>name == "{escaped_name}")) '
+        f"when(rbInst "
+        f"rbInst~>w = {w} "
+        f"rbInst~>l = {l} "
+        f"rbInst~>m = {m}))"
+    )
+
+
+def schematic_create_smic12sf_mom_cap(
+    instance_name: str,
+    x: float,
+    y: float,
+    orientation: str = "R0",
+    *,
+    ports: int = 2,
+    high_quality: bool = False,
+    ultra_low: bool = False,
+    w: float = 1.0,
+    l: float = 1.0,
+    nf: int = 1,
+    mr: int = 1,
+    cv_expr: str = "cv",
+) -> str:
+    """Build SKILL to create a SMIC12SF MOM capacitor in a schematic.
+
+    Places a ``mom_{quality}{ports}t_1p25`` symbol instance and sets w/l/nf/mr
+    via direct database attribute assignment.  ``mr`` is set as a string
+    (``inst~>mr = "1"``) — it cannot be updated through CDF callbacks.
+
+    Args:
+        instance_name: Instance name (e.g. ``"Cc"``).
+        x, y: Placement coordinates.
+        orientation: ``"R0"``, ``"R90"``, etc.
+        ports: Terminal count — 2, 3, 4, or 5 (default 2).
+        high_quality: Use ``mom_hq_*t_1p25`` high-quality variant.
+        ultra_low: Use ``mom_ulc_*t_1p25`` ultra-low-capacitance variant.
+        w: Width in µm (database units).
+        l: Length in µm (database units).
+        nf: Number of fingers.
+        mr: Multiplier (set as string via direct DB attr).
+        cv_expr: SKILL variable holding the open cellview.
+    """
+    if ports not in _SMIC12SF_MOM_PORT_SUFFIX:
+        raise ValueError(
+            f"ports must be 2, 3, 4, or 5; got {ports}"
+        )
+    if high_quality and ultra_low:
+        raise ValueError("high_quality and ultra_low are mutually exclusive")
+    quality = "hq_" if high_quality else "ulc_" if ultra_low else ""
+    cell_name = f"mom_{quality}{_SMIC12SF_MOM_PORT_SUFFIX[ports]}_1p25"
+    escaped_name = escape_skill_string(instance_name)
+    return (
+        f"let((rbMaster) "
+        f'rbMaster = dbOpenCellViewByType("{SMIC12SF_LIB}" "{cell_name}" "symbol" "schematicSymbol" "r") '
+        f'dbCreateInst({cv_expr} rbMaster "{escaped_name}" '
+        f"{skill_point(x, y)} "
+        f'"{escape_skill_string(orientation)}"))\n'
+        f"let((rbInst) "
+        f'rbInst = car(setof(x {cv_expr}~>instances x~>name == "{escaped_name}")) '
+        f"when(rbInst "
+        f"rbInst~>w = {w} "
+        f"rbInst~>l = {l} "
+        f"rbInst~>nf = {nf} "
+        f'rbInst~>mr = "{mr}"))'
+    )

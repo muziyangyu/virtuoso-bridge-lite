@@ -245,27 +245,13 @@ Load on demand — each contains detailed API docs and edge-case guidance:
 
 ### `examples/01_virtuoso/maestro/`
 - `01_read_focused_maestro.py` — in-memory snapshot of the focused maestro (config + env + results + outputs + corners + variables)
-- `02_snapshot_with_metrics.py` — snapshot the focused maestro to a timestamped directory (disk artifacts)
-- `03_bg_open_read_close_maestro.py` — background open → read config → close (no GUI window)
-- `04_gui_open_snapshot_close.py` — GUI open → snapshot artifacts → close (owns lifecycle)
-- `05_gui_session_lifecycle.py` — GUI session lifecycle integration test (open/close edge cases)
-- `06a_rc_create.py` — create RC schematic + Maestro setup (cell name auto-timestamped)
-- `06b_rc_simulate_and_read.py` — run simulation in background, read results, export waveforms
-- `07_ensure_maestro_view.py` — bootstrap a missing maestro cellview (`maeOpenSetup` + `maeSaveSetup`) before `open_gui_session`
-- `08_set_simulator_mode.py` — switch between APS / Spectre X (LX/MX/AX/VX/CX) / Spectre FX via `asiSetHighPerformanceOptionVal`
-- `09_export_sweep_subpoints.py` — pull per-sweep-point waveforms via OCEAN `openResults(<abs path>)` (works around `maeOpenResults` rejecting `Interactive.N/M`)
-
-### `examples/01_virtuoso/veriloga/`
-- `import_veriloga.py` — turn a local `.va` file into a Cadence Verilog-A cellview via the 5-step IC618 path: placeholder schematic → symbol → veriloga skeleton → upload .va → reparse.  This example covers the **file/cellview interface only** — the `.va` contents are out of scope; `sample.va` is a trivial placeholder.
-
-### `examples/01_virtuoso/diagnostics/`
-- `sniff_cdslck.py` — walk a library tree and report `.cdslck` lock-file owners.  Authoritative when SKILL-side session enumeration disagrees with on-disk reality.
-
-### `examples/01_virtuoso/digital_import/`
-Hand off Genus/Innovus P&R products into a Virtuoso library.  All three scripts wrap standalone Cadence batch tools (`strmin` / `ihdl`) via SKILL `system()` — no GUI forms, no manual bootstrap.  See that folder's `README.md` for prerequisites, PDK-portability notes, and full CLI reference.
-- `import_gds.py` — routed layout via `strmin`
-- `import_verilog.py` — schematic + symbol via `ihdl` batch (the official CLI entry point for Verilog Import)
-- `add_power_labels.py` — drop VDD/VSS labels on a routed layout by reflectively reading std-cell pin geometry (no `--ref-cell` needed, auto-discovers)
+- `03_bg_open_read_close_maestro.py` — background open → read config → close
+- `06a_rc_create.py` — create RC schematic + Maestro setup
+- `06b_rc_simulate.py` — run simulation
+- `06c_rc_read_results.py` — read results, export waveforms, open GUI
+- `07_gui_session_lifecycle.py` — GUI session lifecycle integration test (open/close edge cases)
+- `08_gui_open_snapshot_close.py` — GUI open → snapshot artifacts → close (owns lifecycle)
+- `09_snapshot_with_metrics.py` — snapshot the focused maestro to a timestamped directory (disk artifacts)
 
 ## Common workflows
 
