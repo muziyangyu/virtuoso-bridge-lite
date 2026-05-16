@@ -1,54 +1,31 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Virtuoso Bridge Lite — 完整 API 使用指南
+=======
+# Virtuoso Bridge Lite
+>>>>>>> e516a1b (update)
 
-> **项目目标**: 用 Python 远程控制 Cadence Virtuoso，实现原理图/版图编辑、仿真运行、结果解析的全自动化。
-> **文档生成时间**: 基于 `src/` 核心源码、`examples/` 所有示例脚本、`skills/` 技能定义深度分析生成
-
----
-
-## 目录
-
-1. [快速开始](#快速开始)
-2. [核心架构](#核心架构)
-3. [VirtuosoClient API](#virtuosoclient-api)
-4. [Schematic 原理图 API](#schematic-原理图-api)
-5. [Layout 版图 API](#layout-版图-api)
-6. [Maestro 仿真 API](#maestro-仿真-api)
-7. [Spectre 独立仿真 API](#spectre-独立仿真-api)
-8. [参数优化 API](#参数优化-api)
-9. [常见问题与最佳实践](#常见问题与最佳实践)
-
----
+用 Python 远程控制 Cadence Virtuoso，实现原理图/版图编辑、仿真运行、结果解析的全自动化。
 
 ## 快速开始
 
-### 1. 安装
-
 ```bash
-cd virtuoso-bridge-lite
-uv venv .venv && source .venv/bin/activate   # Windows: source .venv/Scripts/activate
+uv venv .venv && source .venv/bin/activate
 uv pip install -e .
 ```
 
-### 2. 配置环境变量
-
-在项目根目录创建 `.env` 文件:
-
+`.env` 文件:
 ```dotenv
-# SSH 连接配置
 VB_REMOTE_HOST=your-server
 VB_REMOTE_USER=username
 VB_REMOTE_PORT=65081
 VB_LOCAL_PORT=65082
-
-# 跳板机配置 (可选)
-VB_JUMP_HOST=bastion.example.com
-
-# Cadence 环境 (用于 Spectre)
-VB_CADENCE_CSHRC=/path/to/cds.cshrc
+VB_JUMP_HOST=bastion.example.com        # 可选
+VB_CADENCE_CSHRC=/path/to/cds.cshrc     # Spectre 用
 ```
 
+<<<<<<< HEAD
 ### 3. 启动桥接服务
 =======
 # AGENTS.md — AI Agent Guide for virtuoso-bridge-lite
@@ -110,10 +87,14 @@ VB_CADENCE_CSHRC=/path/to/cds.cshrc
 ### 3. 启动桥接服务
 >>>>>>> 6e8eaeb (update)
 
+=======
+>>>>>>> e516a1b (update)
 ```bash
-virtuoso-bridge start
+virtuoso-bridge start     # 启动隧道 + 守护进程
+virtuoso-bridge status    # 验证: [tunnel] running, [daemon] OK, [spectre] OK
 ```
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 ### 4. 在 Virtuoso CIW 中加载 (首次运行)
@@ -212,6 +193,9 @@ sim = SpectreSimulator.from_env(profile="worker1")
 ```
 
 ---
+=======
+首次运行需在 CIW 中执行 `start` 输出的 `load(...)` 命令。
+>>>>>>> e516a1b (update)
 
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -223,6 +207,7 @@ sim = SpectreSimulator.from_env(profile="worker1")
 ## 核心架构
 >>>>>>> 6e8eaeb (update)
 
+<<<<<<< HEAD
 ### 三层解耦设计
 
 ```
@@ -398,222 +383,56 @@ virtuoso_bridge/
     ├── runner.py         # SpectreSimulator 类 (本地/远程运行)
     └── parsers.py        # PSF ASCII 结果解析器 (delta 压缩支持)
 >>>>>>> 6e8eaeb (update)
+=======
+三层解耦: `Schematic/Layout/Maestro/Spectre API` → `VirtuosoClient (TCP SKILL)` → `SSHClient (隧道+传输)`
+
+```
+virtuoso_bridge/
+├── __init__.py              # VirtuosoClient, SSHClient, SpectreSimulator
+├── transport/               # SSH 隧道, 远程命令, 文件传输
+├── virtuoso/
+│   ├── basic/bridge.py      # TCP SKILL 客户端核心
+│   ├── schematic/           # editor(上下文管理器), reader, params, ops
+│   ├── layout/              # editor, reader, ops, layers(SMIC12SF), pdk(PDK生成器)
+│   ├── maestro/             # lifecycle, snapshot, reader/
+│   └── snapshot.py
+└── spectre/                 # runner(SpectreSimulator), parsers(PSF ASCII+delta)
+>>>>>>> e516a1b (update)
 ```
 
----
+## 核心 API 模式
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 ## VirtuosoClient API
 
 ### 导入与初始化
+=======
+### VirtuosoClient
+>>>>>>> e516a1b (update)
 
 ```python
-from virtuoso_bridge import VirtuosoClient, decode_skill_output
-
-# 从环境变量创建客户端 (推荐)
+from virtuoso_bridge import VirtuosoClient
 client = VirtuosoClient.from_env()
 
-# 指定 profile (多环境支持)
-client_prod = VirtuosoClient.from_env(profile="prod")
-
-# 或手动指定连接 (较少使用)
-client = VirtuosoClient(host="localhost", port=65082)
-```
-
-### 核心方法
-
-#### 1. `execute_skill(skill_expr, timeout=30)`
-
-执行任意 SKILL 表达式。
-
-**参数:**
-- `skill_expr` (str): SKILL 表达式
-- `timeout` (int): 超时时间 (秒)
-
-**返回:** `SkillResult` 对象，包含 `.status`, `.output`, `.raw`
-
-```python
-# 简单计算
+# 执行任意 SKILL — 返回 SkillResult(.status, .output, .raw)
 result = client.execute_skill("1 + 2")
-print(result.output)  # "3"
 
-# 获取库列表
-result = client.execute_skill("ddGetLibList()")
+# 批量读取属性 — 一次往返, 避免 N+1
+instances = client.fetch("geGetEditCellView()~>instances", ["name", "cellName", "libName"])
+cv_info = client.fetch_one("geGetEditCellView()", ["libName", "cellName", "viewName"])
 
-# 多行 SKILL (带 let 绑定)
-skill_code = '''
-let((cv insts)
-  cv = dbOpenCellViewByType("myLib" "myCell" "schematic" "schematic" "r")
-  insts = cv~>instances
-  dbClose(cv)
-  length(insts)
-)
-'''
-result = client.execute_skill(skill_code)
-num_instances = int(result.output)
-```
+# 文件传输 & Shell
+client.upload_file("local.scs", "/tmp/remote.scs")
+client.download_file("/tmp/result.raw", "local/result.raw")
+client.run_shell_command("ls /tmp/")
 
-**重要注意事项:**
-- 返回值是字符串形式，需要自行解析
-- `printf` 输出不会返回给 Python (只显示在 CIW)
-- 使用 `list()` 或单个表达式返回值
-- 长操作使用 `timeout=300` (如仿真)
-
----
-
-#### 2. `fetch(skill_expr, fields)`
-
-批量提取对象属性，**一次往返**获取多个字段。
-
-这是性能最优的读取方式 — 避免 N+1 查询问题。
-
-**参数:**
-- `skill_expr` (str): 返回对象列表的 SKILL 表达式
-- `fields` (list[str]): 要提取的属性名列表
-
-**返回:** list[dict] — 每个对象的属性字典
-
-```python
-# 获取当前原理图的所有实例及其属性 (1 次往返)
-instances = client.fetch(
-    "geGetEditCellView()~>instances",
-    ["name", "cellName", "libName", "viewName"]
-)
-
-# 结果:
-# [
-#   {"name": "M1", "cellName": "nch_mac", "libName": "smic12sf", "viewName": "symbol"},
-#   {"name": "M2", "cellName": "nch_mac", "libName": "smic12sf", "viewName": "symbol"},
-#   ...
-# ]
-
-# 获取选中的对象
-selected = client.fetch("geGetSelSet()", ["objType", "name", "cellName"])
-```
-
----
-
-#### 3. `fetch_one(skill_expr, fields)`
-
-提取单个对象的属性。
-
-```python
-# 获取当前编辑的 cellview 信息
-cv_info = client.fetch_one(
-    "geGetEditCellView()",
-    ["libName", "cellName", "viewName"]
-)
-
-# cv_info = {"libName": "myLib", "cellName": "myCell", "viewName": "schematic"}
-```
-
----
-
-#### 4. `decode_skill_output(raw)`
-
-解码 SKILL 输出，去除引号和转义字符。
-
-```python
-raw = '"Hello\\nWorld"'
-decoded = decode_skill_output(raw)
-# "Hello\nWorld" → 实际换行
-```
-
----
-
-#### 5. `load_il(file_path)`
-
-上传并加载 `.il` SKILL 文件。
-
-```python
-# 加载本地脚本文件
-client.load_il("scripts/my_skill_script.il")
-
-# 等效于:
-# client.upload_file("local_script.il", "/tmp/remote_script.il")
-# client.execute_skill('load("/tmp/remote_script.il")')
-```
-
----
-
-#### 6. 文件传输
-
-```python
-# 本地上传 → 远程
-client.upload_file("local/path/file.scs", "/tmp/remote/file.scs")
-
-# 远程下载 → 本地
-client.download_file("/tmp/remote/results.raw", "local/results.raw")
-
-# 上传多个文件 (通过 SSHRunner)
-from virtuoso_bridge.transport.ssh import SSHRunner
-runner = SSHRunner(host="server", user="user")
-runner.upload(["a.scs", "b.va"], "/tmp/work/")
-```
-
----
-
-#### 7. 窗口与截图
-
-```python
-# 列出所有打开的 Virtuoso 窗口
-windows = client.list_windows()
-# 返回: [(window_id, window_title), ...]
-
-# 打开指定 cellview 的窗口
-client.open_window("myLib", "myCell", view="schematic")
-
-# 截图当前窗口
-client.screenshot(output_dir="output/", target="current")
-
-# 截图 CIW 窗口
-client.screenshot(output_dir="output/", target="ciw")
-
-# 截图指定窗口 ID
-client.screenshot(output_dir="output/", target="1")
-```
-
----
-
-#### 8. 对话框处理
-
-```python
-# 关闭阻塞的模态对话框 (通过 X11，不依赖 SKILL 通道)
-# 当 SKILL 调用超时时，首先尝试这个
+# 对话框恢复 (SKILL 通道阻塞时)
 client.dismiss_dialog()
-
-# 等效 CLI:
-# virtuoso-bridge dismiss-dialog
 ```
 
-**原理**: 使用 X11 `xwininfo` 查找 Virtuoso 拥有的对话框窗口，然后发送 Enter 键。这是唯一可以在 SKILL 通道被阻塞时恢复的方法。
-
----
-
-#### 9. Shell 命令 (远程执行)
-
-```python
-# 在远程服务器执行 shell 命令
-result = client.run_shell_command("ls -la /tmp/")
-print(result.stdout)
-
-# 检查远程文件是否存在
-result = client.run_shell_command("test -f /tmp/netlist.scs && echo exists || echo missing")
-```
-
----
-
-## Schematic 原理图 API
-
-### 上下文管理器模式 (推荐)
-
-**所有原理图编辑应该使用上下文管理器**，它会自动处理:
-- `dbOpenCellViewByType` 打开
-- 批量操作排队
-- `schCheck()` 设计规则检查
-- `dbSave()` 保存
-- `dbClose()` 关闭
+### 原理图编辑 — 始终用上下文管理器
 
 ```python
 from virtuoso_bridge.virtuoso.schematic import (
@@ -621,36 +440,26 @@ from virtuoso_bridge.virtuoso.schematic import (
     schematic_create_pin as pin,
 )
 
-LIB = "work_ai"
-CELL = "inv_example"
-
-# 如果 cell 已存在，先删除 (避免重复叠加)
-client.execute_skill(f'ddDeleteObj(ddGetObj("{LIB}" "{CELL}"))')
-
 with client.schematic.edit(LIB, CELL) as sch:
-    # 1. 放置器件实例
-    sch.add(inst("smic12sf", "p18_ckt", "symbol", "MP0", 0, 1.5, "R0"))  # PMOS
-    sch.add(inst("smic12sf", "n18_ckt", "symbol", "MN0", 0, 0, "R0"))     # NMOS
-
-    # 2. 连接 MOS 端子 (自动生成 stub，不要手动 add_wire)
-    sch.add_net_label_to_transistor("MP0",
-        drain_net="OUT", gate_net="IN", source_net="VDD", body_net="VDD")
-    sch.add_net_label_to_transistor("MN0",
-        drain_net="OUT", gate_net="IN", source_net="VSS", body_net="VSS")
-
-    # 3. 创建引脚 (放在电路边缘，通过 net name 自动连接)
-    sch.add(pin("IN",   -1.0, 0.75, "R0", direction="input"))
-    sch.add(pin("OUT",   1.0, 0.75, "R0", direction="output"))
-    sch.add(pin("VDD",  -1.0, 2.0,  "R0", direction="inputOutput"))
-    sch.add(pin("VSS",  -1.0, -0.5, "R0", direction="inputOutput"))
-
-# 退出上下文时自动执行: schCheck() → dbSave() → dbClose()
+    sch.add(inst("smic12sf", "n18_ckt", "symbol", "MN0", 0, 0, "R0"))
+    sch.add(inst("smic12sf", "p18_ckt", "symbol", "MP0", 0, 1.5, "R0"))
+    # 自动 stub + net label — 不要手动 add_wire
+    sch.add_net_label_to_transistor("MP0", drain_net="OUT", gate_net="IN", source_net="VDD", body_net="VDD")
+    sch.add_net_label_to_transistor("MN0", drain_net="OUT", gate_net="IN", source_net="VSS", body_net="VSS")
+    sch.add(pin("IN", -1.0, 0.75, "R0", direction="input"))
+    sch.add(pin("OUT", 1.0, 0.75, "R0", direction="output"))
+    sch.add(pin("VDD", -1.0, 2.0, "R0", direction="inputOutput"))
+    sch.add(pin("VSS", -1.0, -0.5, "R0", direction="inputOutput"))
+# 退出自动: schCheck() → dbSave() → dbClose()
 ```
 
----
+器件: `inst(lib, cell, view, name, x, y, orient)` — smic12sf: `n18_ckt/p18_ckt/n08_ckt/p08_ckt`, 阈值: `nlvt18_ckt/phvt18_ckt`(ulvt/lvt/svt/hvt)
+analogLib: `cap/res/ind/vsource/isource`
 
-### `schematic_create_inst_by_master_name`
+设置参数 (触发 CDF 回调): `set_instance_params(client, "M1", l="14n", w="100n", nf="4", m="2")`
+读取拓扑: `read_schematic(client, LIB, CELL, include_positions=True)`
 
+<<<<<<< HEAD
 创建器件实例。
 
 **签名:**
@@ -1217,292 +1026,52 @@ import_veriloga(client, "model.va", LIB, "va_model")
 ## Layout 版图 API
 
 ### 上下文管理器模式
+=======
+### 版图编辑 — 用 SMIC12SF 层常量 + PDK 生成器
+>>>>>>> e516a1b (update)
 
 ```python
 from virtuoso_bridge.virtuoso.layout import (
-    layout_create_rect,
-    layout_create_path,
-    layout_create_via,
-    layout_create_polygon,
+    layout_create_rect, layout_create_path, layout_create_via,
     layout_create_inst_by_master_name as lay_inst,
-)
-
-# SMIC 12nm 层常量 (已定义，避免字符串错误)
-from virtuoso_bridge.virtuoso.layout import SMIC12SF
-
-LIB = "work_ai"
-CELL = "layout_example"
-
-with client.layout.edit(LIB, CELL) as lay:
-    # 1. 创建矩形 (AA 层: 有源区)
-    lay.add(layout_create_rect(
-        SMIC12SF.AA, SMIC12SF.DRAWING,
-        [[0, 0], [1, 0.5]]  # [[llx, lly], [urx, ury]]
-    ))
-
-    # 2. 创建连线 (M1 金属)
-    lay.add(layout_create_path(
-        SMIC12SF.M1, SMIC12SF.DRAWING,
-        [[0, 0.25], [2, 0.25]],  # 点列表
-        width=0.1  # 线宽
-    ))
-
-    # 3. 创建通孔 (V0: AA → M1)
-    lay.add(layout_create_via(
-        SMIC12SF.V0, [0.5, 0.25], "R0"
-    ))
-
-    # 4. 创建多边形
-    lay.add(layout_create_polygon(
-        SMIC12SF.M1, SMIC12SF.DRAWING,
-        [[0, 0], [1, 0], [1, 1], [0.5, 1.5], [0, 1]]
-    ))
-
-    # 5. 放置 PDK 器件实例
-    lay.add(lay_inst(
-        "smic12sf", "n18_ckt", "layout", "MN0",
-        [0, 0], "R0"
-    ))
-
-# 自动: dbSave() → dbClose()
-```
-
----
-
-### SMIC12SF 层常量
-
-**类型安全！避免 "M1" vs "m1" 等字符串错误。**
-
-```python
-from virtuoso_bridge.virtuoso.layout import SMIC12SF
-
-# 基础层
-SMIC12SF.AA        # 有源区
-SMIC12SF.FIN       # FinFET 鳍
-SMIC12SF.GT        # 栅极
-SMIC12SF.NW        # N 阱
-SMIC12SF.DNW       # 深 N 阱
-SMIC12SF.PP        # P+ 注入
-SMIC12SF.NP        # N+ 注入
-
-# 金属层 (0-7)
-SMIC12SF.M0, SMIC12SF.M0C
-SMIC12SF.M1, SMIC12SF.M2, SMIC12SF.M3, SMIC12SF.M4
-SMIC12SF.M5, SMIC12SF.M6, SMIC12SF.M7
-
-# 顶层厚金属
-SMIC12SF.TM1, SMIC12SF.TM2
-
-# 铝垫
-SMIC12SF.ALPA, SMIC12SF.PA, SMIC12SF.BUMP
-
-# 通孔
-SMIC12SF.V0        # AA → M0
-SMIC12SF.V1        # M0 → M1
-SMIC12SF.V2        # M1 → M2
-SMIC12SF.V3        # M2 → M3
-SMIC12SF.V4        # M3 → M4
-SMIC12SF.V5        # M4 → M5
-SMIC12SF.V6        # M5 → M6
-SMIC12SF.TV1       # M6 → TM1
-SMIC12SF.TV2       # TM1 → TM2
-SMIC12SF.BV1, SMIC12SF.BV2
-
-# 用途 (Purpose)
-SMIC12SF.DRAWING   # 图形
-SMIC12SF.PIN       # 引脚
-SMIC12SF.LABEL     # 标签
-
-# lpp() 辅助函数 (layer-purpose-pair)
-lpp = SMIC12SF.lpp(SMIC12SF.M1, SMIC12SF.PIN)  # ("M1", "pin")
-```
-
----
-
-### PDK 器件生成器 (SMIC 12nm FinFET)
-
-**自动调用 PDK PCell，参数化生成器件版图。**
-
-```python
-from virtuoso_bridge.virtuoso.layout import (
-    smic12sf_nmos_svt, smic12sf_pmos_svt,
-    smic12sf_nmos_lvt, smic12sf_pmos_lvt,
-    smic12sf_create_nmos, smic12sf_create_pmos,
-    smic12sf_create_resistor,
-    smic12sf_create_mom_cap,
-    smic12sf_create_diode,
+    SMIC12SF, smic12sf_nmos_svt, smic12sf_pmos_svt,
 )
 
 with client.layout.edit(LIB, CELL) as lay:
-    # === MOS 晶体管 ===
-    # 标准阈值 (SVT, 默认) — 速度/功耗平衡
-    lay.add(smic12sf_nmos_svt("MN0", 0, 0, l=0.014, w=0.1, nf=1))
-    lay.add(smic12sf_pmos_svt("MP0", 0, 2, l=0.014, w=0.1, nf=1))
-
-    # 低阈值 (LVT) — 更快但漏电流大
-    lay.add(smic12sf_nmos_lvt("MN1", 5, 0, l=0.014, w=0.1, nf=4))
-    lay.add(smic12sf_pmos_lvt("MP1", 5, 2, l=0.014, w=0.1, nf=4))
-
-    # 完整控制选项
-    lay.add(smic12sf_create_nmos(
-        "MN2", 10, 0,
-        l=0.014,        # 栅长 (um)
-        w=0.1,          # 栅宽每指 (um)
-        nf=10,          # 手指数量
-        m=2,            # 并联倍数
-        vth="ulvt",     # 阈值: ulvt | lvt | svt | hvt
-        voltage="08",   # 电压域: "08" (0.8V 核心), "18" (1.8V IO)
-        dnw=False,      # 深 N 阱隔离 (仅 NMOS)
-    ))
-
-    # === 电阻 ===
-    # 金属电阻 (rm1-rm7, rtm1, rtm2, ralpa)
-    lay.add(smic12sf_create_resistor("R1", 0, 0,
-        res_type="rm1", w=0.1, l=10, m=1))
-
-    # 高阻多晶硅
-    lay.add(smic12sf_create_resistor("R2", 5, 0,
-        res_type="rhrpo", w=0.5, l=100))
-
-    # N 阱电阻
-    lay.add(smic12sf_create_resistor("R3", 10, 0,
-        res_type="rnwsti", w=1, l=5))
-
-    # === MOM 电容 ===
-    # 标准 2 端
-    lay.add(smic12sf_create_mom_cap("C0", 0, 0,
-        ports=2, w=1, l=1, nf=10))
-
-    # 高品质 (HQ)
-    lay.add(smic12sf_create_mom_cap("C1", 5, 0,
-        ports=2, high_quality=True, w=2, l=2))
-
-    # 多端 (2-5 端口)
-    lay.add(smic12sf_create_mom_cap("C2", 10, 0, ports=5, w=1, l=1))
-
-    # === 二极管 ===
-    lay.add(smic12sf_create_diode("D0", 0, 0,
-        diode_type="ndio08", w=0.5, l=0.5))  # N 二极管 0.8V
-    lay.add(smic12sf_create_diode("D1", 5, 0,
-        diode_type="pdio18", w=1, l=1))      # P 二极管 1.8V
+    lay.add(layout_create_rect(SMIC12SF.M1, SMIC12SF.DRAWING, [[0,0], [1,0.5]]))
+    lay.add(layout_create_path(SMIC12SF.M1, SMIC12SF.DRAWING, [[0,0.25],[2,0.25]], width=0.1))
+    lay.add(layout_create_via(SMIC12SF.V0, [0.5, 0.25], "R0"))
+    # PDK 器件 — 自动 LVS clean
+    lay.add(smic12sf_nmos_svt("MN0", 0, 0, l=0.014, w=0.1, nf=4))
+    lay.add(smic12sf_pmos_svt("MP0", 0, 2, l=0.014, w=0.1, nf=4))
 ```
 
-**电压域说明:**
-- `"08"`: 0.8V 核心器件 (高性能，密度高)
-- `"18"`: 1.8V I/O 器件 (耐高压，用于接口)
+SMIC12SF 层: `AA/FIN/GT/NW/DNW/PP/NP`, `M0..M7/TM1/TM2`, `V0..V6/TV1/TV2`, Purpose: `DRAWING/PIN/LABEL`
+SMIC12SF MOS: `l`(um), `w`(um/finger), `nf`(fingers), `m`(multiplier), `vth`(ulvt/lvt/svt/hvt), `voltage`("08"/"18"), `dnw`(NMOS深阱)
+也支持: `smic12sf_create_resistor`, `smic12sf_create_mom_cap`, `smic12sf_create_diode`
 
-**阈值选项 (按速度/漏电流递增排序):**
-1. `hvt` — High Vt: 最慢，漏电流最小
-2. `svt` — Standard Vt: 平衡 (默认)
-3. `lvt` — Low Vt: 较快，漏电流大
-4. `ulvt` — Ultra Low Vt: 最快，漏电流最大
+### MOM 电容 (mom_2t_1p25) — PCell 参数必须直设 DB 属性
 
----
+`lr/nf/tm/bm` 不能走 CDF API，必须 `inst~>lr = "10u"` 直设。详见 memory `smic12sf-mom-cap-pcell-params`。
 
-### 版图读取
+### Maestro 仿真
 
 ```python
-from virtuoso_bridge.virtuoso.layout.reader import read_layout
+from virtuoso_bridge.virtuoso.maestro import open_gui_session, run_and_wait, close_gui_session, snapshot
 
-# 读取版图几何
-layout_data = read_layout(client, LIB, CELL)
-
-# 结构:
-# {
-#   "instances": [...],  # 器件实例
-#   "shapes": [...],     # 所有层的形状 (rect, path, polygon)
-#   "vias": [...],       # 通孔
-#   "layers_used": ["AA", "GT", "M1", "V1", "M2", ...],
-# }
-```
-
----
-
-### 层可见性控制
-
-```python
-from virtuoso_bridge.virtuoso.layout import (
-    set_layer_visible,
-    set_layer_selectable,
-    set_layer_valid,
-)
-
-# 设置 M1 层可见
-set_layer_visible(client, "M1", "drawing", True)
-
-# 设置 V0 通孔不可选
-set_layer_selectable(client, "V0", "drawing", False)
-```
-
----
-
-### 清除与删除
-
-```python
-# 删除指定层上的所有形状
-from virtuoso_bridge.virtuoso.layout import delete_shapes_on_layer
-delete_shapes_on_layer(client, LIB, CELL, "M1", "drawing")
-
-# 清除所有布线 (金属 + 通孔)
-from virtuoso_bridge.virtuoso.layout import clear_routing
-clear_routing(client, LIB, CELL)
-
-# 清除当前编辑的版图
-from virtuoso_bridge.virtuoso.layout import clear_current_layout
-clear_current_layout(client)
-```
-
----
-
-### 选择与删除
-
-```python
-from virtuoso_bridge.virtuoso.layout import select_and_delete
-
-# 选择并删除指定对象
-select_and_delete(client, ["inst:M1", "shape:M1:1234"])
-```
-
----
-
-## Maestro 仿真 API
-
-### 会话生命周期
-
-```python
-from virtuoso_bridge.virtuoso.maestro import (
-    open_gui_session,
-    close_gui_session,
-    run_and_wait,
-    ensure_maestro_view,
-)
-
-LIB = "work_ai"
-CELL = "tb_opamp"
-
-# 确保 maestro view 存在 (不存在则创建空的)
-ensure_maestro_view(client, LIB, CELL)
-
-# 打开 GUI 会话 (必须用于结果读取)
 session = open_gui_session(client, LIB, CELL)
-print(f"Session ID: {session}")
-
-# 运行仿真并等待完成
-# history: 仿真结果目录名 (如 "Interactive.1")
-# log_path: 日志文件路径
 history, log_path = run_and_wait(client, session=session, timeout=300)
-
-# 关闭会话 (save=True 保存设置变更)
 close_gui_session(client, session, save=True)
+
+# 快照 — 最常用操作
+snapshot(client)                           # 轻量: SKILL probes only
+snapshot(client, output_root="output/")    # 完整: XML + PSF + netlist
 ```
 
----
-
-### 快照 Snapshot
-
-**这是最常用的 Maestro 操作！** 捕获当前 Maestro 窗口的完整状态。
+### Spectre 独立仿真 — 不需要 GUI
 
 ```python
+<<<<<<< HEAD
 from virtuoso_bridge.virtuoso.maestro import snapshot
 
 # === 方式 1: CLI (最简单，推荐) ===
@@ -3458,89 +3027,31 @@ Trust Region Bayesian Optimization — 样本效率最高的黑盒优化算法�
 ```python
 import numpy as np
 from turbo import Turbo1
+=======
+>>>>>>> e516a1b (update)
 from virtuoso_bridge.spectre.runner import SpectreSimulator
+sim = SpectreSimulator.from_env(work_dir="./output", output_format="psfascii")
+result = sim.run_simulation(Path("tb.scs"), {})
+if result.status.is_ok:
+    freq, vout = result.data["ac_freq"], result.data["ac_VOUT"]
 
-# === 1. 定义参数空间 ===
-PARAM_NAMES = ["W_in", "W_load", "I_bias", "Cc"]
-LOWER_BOUNDS = np.array([0.5e-6, 0.5e-6, 1e-6, 10e-15])  # 下界
-UPPER_BOUNDS = np.array([10e-6, 10e-6, 100e-6, 1e-12])  # 上界
-
-# === 2. 创建仿真器 ===
-sim = SpectreSimulator.from_env(
-    spectre_args=["+preset=ax"],
-    work_dir="./opt_work",
-    output_format="psfascii",
-)
-
-# === 3. 定义目标函数 (越小越好) ===
-def objective(x):
-    try:
-        # x 是归一化的 [0,1] 向量，映射到实际参数范围
-        params = LOWER_BOUNDS + x * (UPPER_BOUNDS - LOWER_BOUNDS)
-        param_dict = dict(zip(PARAM_NAMES, params))
-        
-        # 生成网表
-        netlist = generate_opamp_netlist(param_dict)
-        Path("/tmp/tb_opt.scs").write_text(netlist)
-        
-        # 运行仿真
-        result = sim.run_simulation(Path("/tmp/tb_opt.scs"), {})
-        
-        if not result.status.is_ok:
-            return 1e6  # 仿真失败，罚分
-        
-        # 计算性能指标
-        dc_gain, gbw, pm, power = analyze_ac_results(result.data)
-        
-        # 目标: 最大化 GBW，同时满足约束
-        # 违反约束的项会被放大惩罚
-        constraint_violation = 0
-        if dc_gain < 60:  # 增益 > 60dB
-            constraint_violation += (60 - dc_gain) ** 2
-        if pm < 60:       # 相位裕度 > 60°
-            constraint_violation += (60 - pm) ** 2
-        if power > 1e-3:  # 功耗 < 1mW
-            constraint_violation += ((power - 1e-3) * 1e3) ** 2
-        
-        # 目标: -GBW (最小化 = 最大化 GBW) + 约束惩罚
-        return -gbw + 1e6 * constraint_violation
-        
-    except Exception as e:
-        print(f"Exception: {e}")
-        return 1e6
-
-# === 4. 运行优化 ===
-turbo = Turbo1(
-    f=objective,
-    lb=np.zeros(len(PARAM_NAMES)),  # TuRBO 在 [0,1] 空间搜索
-    ub=np.ones(len(PARAM_NAMES)),
-    n_init=2 * len(PARAM_NAMES),    # 初始采样点 (2× 参数数)
-    max_evals=100,                  # 最大评估次数
-    batch_size=1,                   # 串行评估 (用 >1 并行)
-    verbose=True,
-)
-
-turbo.optimize()
-
-# === 5. 获取最优结果 ===
-best_idx = turbo.fX.argmin()
-best_x_norm = turbo.X[best_idx]
-best_x = LOWER_BOUNDS + best_x_norm * (UPPER_BOUNDS - LOWER_BOUNDS)
-best_f = turbo.fX[best_idx]
-
-print(f"\n🎉 最优参数:")
-for name, val in zip(PARAM_NAMES, best_x):
-    print(f"  {name} = {val:.2e}")
-print(f"  GBW = {-best_f:.2e} Hz")
+# 并行
+results = sim.run_parallel([(Path("a.scs"),{}), (Path("b.scs"),{})], max_workers=4)
 ```
 
----
+## 关键注意事项
 
-### 参数扫描 (Grid Search / Random Search)
+- **始终用上下文管理器** 编辑原理图/版图 — 它自动 save/close
+- **修改参数用 `set_instance_params`** — 触发 CDF 回调; 不要裸调 `dbReplaceProp`
+- **用 `add_net_label_to_transistor` 连线** — 不要手动 `add_wire`
+- **用 SMIC12SF 层常量** — 不要字符串 `"M1"`，类型安全
+- **SKILL 超时先 `dismiss_dialog()`** — 对话框阻塞 SKILL 通道
+- **Spectre 模式**: `ax`(推荐), `lx`(大规模), `spectre`(兼容旧网表)
+- **SMIC12SF PCell `lr/nf/tm/bm`** 必须 `inst~>prop = val` 直设, 不走 CDF
 
-```python
-import itertools
+## 详细参考
 
+<<<<<<< HEAD
 # 定义扫描范围
 W_values = [1e-6, 2e-6, 5e-6, 10e-6]
 I_values = [10e-6, 20e-6, 50e-6]
@@ -3952,3 +3463,16 @@ png_path = get_output_path("screenshot", "png")
 **适用版本**: virtuoso-bridge v1.0+
 **验证状态**: ✅ 所有 API 签名已对照源码验证
 >>>>>>> 6e8eaeb (update)
+=======
+| 主题 | 路径 |
+|-----|------|
+| Schematic API (Python) | `skills/virtuoso/references/schematic-python-api.md` |
+| Schematic API (SKILL) | `skills/virtuoso/references/schematic-skill-api.md` |
+| Layout API (Python) | `skills/virtuoso/references/layout-python-api.md` |
+| Layout API (SKILL) | `skills/virtuoso/references/layout-skill-api.md` |
+| Maestro API | `skills/virtuoso/references/maestro-python-api.md` |
+| SMIC12SF PDK | `skills/virtuoso/references/smic12sf-pdk.md` |
+| 仿真流程指南 | `skills/virtuoso/references/simulation-flow.md` |
+| 故障排除 | `skills/virtuoso/references/troubleshooting.md` |
+| Spectre 网表语法 | `skills/spectre/references/netlist_syntax.md` |
+>>>>>>> e516a1b (update)
