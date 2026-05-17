@@ -181,6 +181,22 @@ result = runner.run_netlist("netlist.scs", output_dir="./sim")
 
 完整示例: `examples/02_spectre/`
 
+### Spectre 网表注意事项
+
+**AC 激励参数是 `mag=` 不是 `ac=`**：
+
+```spectre
+// 正确 — AC 分析用 mag= 参数
+VTOP (net9 0) vsource dc=0 mag=1 type=dc
+
+// 错误 — spectre vsource 不支持 ac=
+VTOP (net9 0) vsource dc=0 ac=1 type=dc  // Warning: ignored
+```
+
+参考 `examples/02_spectre/assets/cap_dc_ac/tb_cap_dc_ac.scs`。
+
+**Maestro netlister 会优化掉零值 DC 源**（如 dc=0 的 VTOP 不输出到网表），需要手动补回或让 DC ≠ 0。
+
 ## 通信协议
 
 Python → TCP JSON → RAMIC Bridge Daemon (Virtuoso SKILL 侧):
@@ -204,13 +220,66 @@ client.execute_skill('master~>nf~>value')
 client.execute_skill('master~>w~>value')
 ```
 
-| 器件 | PCell | 参数 |
-|------|-------|------|
-| NMOS | n18_ckt | nfin, nf, l |
-| PMOS | p18_ckt | nfin, nf, l |
-| MOM 电容 | mom_2t_1p25 | lr, nf, tm, bm |
-| MIM 电容 | mim_ckt | W, H |
-| 电阻 | rhrpo_2t_ckt | l, w, tr |
+| 器件 | PCell | 关键参数 | 参数设置 |
+|------|-------|---------|---------|
+| NMOS | n18_ckt | nfin, nf, l | `dbReplaceProp(inst "nfin" "float" 6)` |
+| PMOS | p18_ckt | nfin, nf, l | `dbReplaceProp(inst "nfin" "float" 6)` |
+| MOM 电容 | mom_2t_1p25 | lr, nf, tm, bm | `inst~>lr = "10u"` |
+| MIM 电容 | mim_ckt | w, l, m | `dbReplaceProp(inst "w" "string" "5u")` |
+| 电阻 | rhrpo_2t_ckt | l, w, tr | — |
+
+## PDK 参数设置经验
+
+### SMIC12SF MIM 电容 (mim_ckt)
+
+通过 SKILL 设置 `mim_ckt` 参数时，必须用 `dbReplaceProp` 且 propType 为 `"string"`：
+
+```python
+# ✅ 正确
+client.execute_skill('dbReplaceProp(inst "w" "string" "5u")')
+client.execute_skill('dbReplaceProp(inst "l" "string" "5u")')
+
+# ❌ 错误 — float 类型不生效（PCell 可能不转换单位）
+client.execute_skill('dbReplaceProp(inst "w" "float" 5e-6)')
+```
+
+CDF 回调链（`cdfGetInstCDF` + `cdfGetCellCDF` + callback）理论上可行但过于复杂，`dbReplaceProp` + `"string"` 是最简方案。
+
+### PCell Layout 生成
+
+创建 PCell 的 layout view 用 `dbCreateParamInstByMasterName`：
+
+```python
+skill = 'let((cv inst) cv = dbOpenCellViewByType(LIB CELL "layout" "maskLayout" "a") inst = dbCreateParamInstByMasterName(cv "smic12sf" "mim_ckt" "layout" "MIM0" list(0 0) "R0") dbReplaceProp(inst "w" "string" "wu") dbReplaceProp(inst "l" "string" "lu") dbSave(cv) dbClose(cv))'
+client.execute_skill(skill, timeout=30)
+```
+
+### GDS 导出
+
+用 `xstSetField` + `xstOutDoTranslate`，**务必在 `let()` 内执行**以隔离全局状态：
+
+```python
+skill = 'let((r) xstSetField("library" LIB) xstSetField("topCell" CELL) xstSetField("strmFile" GDS) xstSetField("view" "layout") xstSetField("showCompletionMsgBox" "false") r = xstOutDoTranslate())'
+client.execute_skill(skill, timeout=60)
+```
+
+循环导出时必须用 `let()` 包裹，否则 `xstSetField` 全局状态污染导致 0 字节输出。
+
+### 新建 cell 的参数设置
+
+批量创建含参数的 cell 时，先全删旧 cell：
+
+```python
+# 先清空再创建
+for c in (r.output or "").strip("()").split():
+    client.execute_skill('dbDeleteCell(ddGetObj(LIB) "{}")'.format(c))
+
+# 单行 SKILL: 创建 + 设参 + 保存
+skill = 'let((cv inst) cv = dbOpenCellViewByType(LIB CELL "schematic" "schematic" "a") inst = dbCreateInst(...) dbReplaceProp(...) dbSave(cv) dbClose(cv))'
+client.execute_skill(skill, timeout=30)
+```
+
+`set_instance_params()` 需要 cellview 处于 `geGetEditCellView()` 激活状态，不适合批量离线创建。
 
 ## 约束与注意事项
 
@@ -247,3 +316,12 @@ t.start()
 python3 examples/02_spectre/01_inverter_tran.py
 python3 examples/02_spectre/03_check_license.py
 ```
+
+## 文档索引
+
+| 文档 | 位置 | 说明 |
+|------|------|------|
+| ⚠️ 原理图陷阱手册 | `docs/guides/SKILL_QUICK_REFERENCE.md` | 必读 — 8 个生产级 BUG（edit() 嵌套清空、终端大小写、参数单位等）|
+| ⭐ 原理图→仿真完整流程 | `docs/guides/SCHEMATIC_GENERATION_PLAYBOOK.md` | 5 阶段工作流 + 12 个陷阱 + 仿真优化策略 |
+| Spectre 网表故障排除 | `docs/troubleshooting/SPECTRE_TROUBLESHOOTING.md` | 网表语法、AC 反馈、DC 偏置修复、PSF 解析 |
+| 运放调试日志 | `docs/troubleshooting/SPECTRE_OPAMP_DEBUG_NOTES.md` | 10 管两级运放从 -600dB 到 67dB 的完整优化历程 |

@@ -83,28 +83,6 @@
 **优化过程中的工作脚本都归档在项目根目录的 `output/` 文件夹下，而不是 `docs/tools/`。**
 
 ### output/ 目录存放：
-- ✅ 实际运行的优化脚本（`opamp_dc_ac_sim.py` 等）
-- ✅ 带时间戳的仿真运行目录
-- ✅ Spectre 网表（`.scs`）和原始结果（`.raw/`）
-- ✅ 生成的 Bode 图、性能图表（`.png`）
-- ✅ 参数扫描的批量结果
-
-### docs/tools/ 目录仅存放：
-- 📌 通用的基础设施脚本（文档提取、PDK 探索等）
-- 📌 可复用的工具代码
-- 📌 不会频繁变动的参考脚本
-
-### 为什么这样区分？
-1. **体积原因** - 优化产生的 `.raw` 数据文件可能很大（几百 MB）
-2. **时效性** - 优化脚本是实验性质，随时可能修改或废弃
-3. **可重现** - 脚本 + 结果放在同一目录，便于复现当时的仿真环境
-4. **Git 友好** - `output/` 通常在 `.gitignore` 中，避免大文件提交
-
-## 优化脚本归档说明
-
-**优化过程中的工作脚本都归档在项目根目录的 `output/` 文件夹下，而不是 `docs/tools/`。**
-
-### output/ 目录存放：
 - ✅ 实际运行的优化脚本（`optimize_formula.py`, `optimize_converge.py` 等）
 - ✅ 带时间戳的仿真运行目录
 - ✅ Spectre 网表（`.scs`）和原始结果（`.raw/`）
@@ -126,15 +104,6 @@
 
 ---
 
-## 相关文档索引
-
-| 文档 | 路径 | 描述 |
-|---|---|---|
-| SMIC 12nm PDK 参考 | [`skills/virtuoso/references/smic12sf-pdk.md`](../../skills/virtuoso/references/smic12sf-pdk.md) | 器件生成器、层定义、参数范围 |
-| SMIC 12nm 原理图同步指南 | [`skills/virtuoso/references/smic12sf-schematic-sync.md`](../../skills/virtuoso/references/smic12sf-schematic-sync.md) | CDF 参数命名、set_instance_params 用法、常见问题 |
-| Schematic Python API | [`skills/virtuoso/references/schematic-python-api.md`](../../skills/virtuoso/references/schematic-python-api.md) | SchematicEditor、SchematicOps API 参考 |
-| Virtuoso SKILL API | [`skills/virtuoso/SKILL.md`](../../skills/virtuoso/SKILL.md) | Virtuoso 客户端、SKILL 执行 |
-
 ---
 
-*最后更新：2026-04-30*
+*最后更新：2026-05-17*
