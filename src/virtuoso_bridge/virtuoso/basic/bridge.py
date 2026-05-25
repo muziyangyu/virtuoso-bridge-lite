@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from virtuoso_bridge.env import load_vb_env
+from virtuoso_bridge.profile import resolve_profile
 from virtuoso_bridge.virtuoso.basic.composition import compose_skill_script
 from virtuoso_bridge.models import ExecutionStatus, VirtuosoInterface, VirtuosoResult
 from virtuoso_bridge.virtuoso.ops import (
@@ -107,9 +108,12 @@ class VirtuosoClient(VirtuosoInterface):
         """Create a VirtuosoClient from environment variables.
 
         If *profile* is given (e.g. ``"gpu1"``), reads ``VB_REMOTE_HOST_gpu1``
-        etc.  If an SSH tunnel is already running (via ``virtuoso-bridge start``),
-        connects to its port.  Otherwise creates a new SSHClient.
+        etc.  Otherwise resolves a profile binding before falling back to the
+        default unsuffixed variables.  If an SSH tunnel is already running (via
+        ``virtuoso-bridge start``), connects to its port.  Otherwise creates a
+        new SSHClient.
         """
+        profile = resolve_profile(profile)
         load_vb_env()
         from virtuoso_bridge.transport.tunnel import SSHClient
 
@@ -516,7 +520,10 @@ let((result winName ciwNum)
             configured_user=self._tunnel._remote_user if self._tunnel else None,
             runner=self._tunnel._ssh_runner if self._tunnel else None,
         )
-        screenshot_dir = default_virtuoso_bridge_dir(username, "screenshots")
+        from virtuoso_bridge.transport.remote_paths import resolve_client_id
+
+        client_id = resolve_client_id(getattr(self._tunnel, '_profile', None)) if self._tunnel else None
+        screenshot_dir = default_virtuoso_bridge_dir(username, "screenshots", client_id)
         if self._tunnel and self._tunnel._ssh_runner:
             self._tunnel._ssh_runner.run_command(f"mkdir -p {screenshot_dir}")
 
@@ -661,7 +668,8 @@ let((result winName ciwNum)
             user = os.getenv("USER", "") or os.getenv("USERNAME", "") or "local"
         else:
             user = runner.user or os.getenv("VB_REMOTE_USER", "")
-        return x11.dismiss_dialogs(runner, user, display)
+        profile = getattr(self._tunnel, "_profile", None) if self._tunnel else None
+        return x11.dismiss_dialogs(runner, user, display, profile=profile)
 
     # -- file transfer (delegates to tunnel) --------------------------------
 
@@ -816,14 +824,23 @@ let((result winName ciwNum)
         """Return (remote_path, uploaded) where uploaded=False means cache hit."""
         p = Path(path)
         if self._tunnel is not None and p.is_file():
-            from virtuoso_bridge.transport.remote_paths import default_virtuoso_bridge_dir, resolve_remote_username
+            from virtuoso_bridge.transport.remote_paths import (
+                default_virtuoso_bridge_dir,
+                resolve_client_id,
+                resolve_remote_username,
+            )
+            from virtuoso_bridge.transport.tunnel import _profiled_bridge_leaf
             work_dir = self._tunnel.remote_work_dir
             if not work_dir:
                 remote_username = resolve_remote_username(
                     configured_user=getattr(self._tunnel, '_remote_user', None),
                     runner=self._tunnel.ssh_runner,
                 )
-                work_dir = default_virtuoso_bridge_dir(remote_username, "virtuoso_bridge")
+                work_dir = default_virtuoso_bridge_dir(
+                    remote_username,
+                    _profiled_bridge_leaf(getattr(self._tunnel, '_profile', None)),
+                    resolve_client_id(getattr(self._tunnel, '_profile', None)),
+                )
             remote_dir = work_dir.rstrip("/")
             remote_path = f"{remote_dir}/{p.name}"
             content = p.read_bytes()
